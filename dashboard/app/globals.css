@@ -1,8 +1,1 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-body {
-  background: #f7f7f7;
-  font-family: sans-serif;
-}
+body{font-family:sans-serif;margin:0;padding:0;background:#f8fafc;}
