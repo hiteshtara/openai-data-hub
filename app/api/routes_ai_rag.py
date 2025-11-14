@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query
 import openai
-from vector_store import get_collection
+from vectors.vector_store import get_collection
+
 
 router = APIRouter()
 openai.api_key = None  # systemd injects API key
