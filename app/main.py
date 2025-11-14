@@ -12,6 +12,6 @@ app=FastAPI()
 @app.get('/')
 def home(): return {'status':'prod-ready'}
 app.include_router(etl_router, prefix="/etl")
-app.include_router(summary_router, prefix="/summary")
+# app.include_router(summary_router, prefix="/summary")
 app.include_router(rag_router, prefix="/ai")
 app.include_router(totals_router, prefix="/etl")
