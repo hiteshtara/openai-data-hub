@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy to EC2 with Rollback
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Copy files to EC2
+    - name: Upload code to EC2
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -21,7 +21,7 @@ jobs:
         source: "."
         target: "/opt/openai-data-hub"
 
-    - name: Restart FastAPI service
+    - name: Execute deployment script on EC2 with rollback support
       uses: appleboy/ssh-action@v0.1.5
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -29,5 +29,6 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd /opt/openai-data-hub
-          git pull origin main
-          sudo systemctl restart openai-data-hub
+          chmod +x deploy.sh
+          ./deploy.sh
+
