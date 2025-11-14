@@ -1,1 +1,1 @@
-export default function Page(){return <div>Anomalies</div>}
+export default function Page(){return <div>Anomalies Detection</div>}

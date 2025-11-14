@@ -1,1 +1,1 @@
-export default function Page(){return <div>Insights (AI)</div>}
+export default function Page(){return <div>AI Insights Streaming</div>}

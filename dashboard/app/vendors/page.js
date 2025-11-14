@@ -1,1 +1,1 @@
-export default function Page(){return <div>Vendors Page</div>}
+export default function Page(){return <div>Vendors Analytics</div>}
