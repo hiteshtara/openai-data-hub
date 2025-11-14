@@ -40,7 +40,7 @@ app.include_router(rag_router, prefix="/ai")
 app.include_router(totals_router, prefix="/etl")
 
 # Analytics (monthly, categories, anomalies)
-app.include_router(analytics_router, prefix="/")
+app.include_router(analytics_router)
 
 
 # ---------------------------------------------------------
