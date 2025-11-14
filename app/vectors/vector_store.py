@@ -1,14 +1,19 @@
 import chromadb
 from chromadb.config import Settings
+import os
 
-# Works with Chroma 0.4.22
+# Ensure storage directory exists
+VECTOR_DIR = "/opt/openai-data-hub/vectors"
+os.makedirs(VECTOR_DIR, exist_ok=True)
+
 def get_collection():
     client = chromadb.Client(
         Settings(
             chroma_db_impl="duckdb+parquet",
-            persist_directory="/opt/openai-data-hub/vectors"
+            persist_directory=VECTOR_DIR
         )
     )
+
     return client.get_or_create_collection(
         name="etl_vectors",
         metadata={"hnsw:space": "cosine"}

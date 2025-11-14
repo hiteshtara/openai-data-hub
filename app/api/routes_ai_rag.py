@@ -1,46 +1,41 @@
 from fastapi import APIRouter, Query
-import openai
 from vectors.vector_store import get_collection
-
+import openai, os
 
 router = APIRouter()
-openai.api_key = None  # systemd injects API key
 
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @router.get("/query")
 def rag_query(question: str = Query(...)):
-    """
-    Ask a question and retrieve relevant rows using vector search.
-    """
+    try:
+        collection = get_collection()
 
-    collection = get_collection()
+        # Fetch vector embeddings for your question
+        emb = openai.Embedding.create(
+            model="text-embedding-3-small",
+            input=question
+        )["data"][0]["embedding"]
 
-    # Embed the question
-    q_emb = openai.Embedding.create(
-        model="text-embedding-3-small",
-        input=question
-    )["data"][0]["embedding"]
+        # Query vector database
+        results = collection.query(
+            query_embeddings=[emb],
+            n_results=5
+        )
 
-    # Query top 5 similar embeddings
-    results = collection.query(
-        query_embeddings=[q_emb],
-        n_results=5
-    )
+        docs = results.get("documents", [[]])[0]
 
-    documents = results["documents"][0]
-    context = "\n".join(documents)
+        # Generate answer using GPT
+        prompt = f"Use these documents as context:\n{docs}\n\nQuestion: {question}"
+        answer = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )["choices"][0]["message"]["content"]
 
-    # Final answer using OpenAI
-    answer = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a data assistant."},
-            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"}
-        ]
-    )["choices"][0]["message"]["content"]
+        return {
+            "answer": answer,
+            "context_docs": docs
+        }
 
-    return {
-        "question": question,
-        "context_docs": documents,
-        "answer": answer
-    }
+    except Exception as e:
+        return {"error": str(e)}
