@@ -1,15 +1,19 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Add /opt/openai-data-hub/app to Python path
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(APP_ROOT)
 
 import boto3
 import traceback
-from clean import clean_file
+from etl.clean import clean_file
 from log import logger
 
 RAW_BUCKET = "openai-data-hub-raw"
 
 s3 = boto3.client("s3")
+
 
 def run_pipeline():
     logger.info("=== Starting ETL Pipeline ===")
@@ -35,13 +39,14 @@ def run_pipeline():
 
         try:
             clean_file(key)
-            logger.info(f"SUCCESS: Finished {key}")
+            logger.info(f"SUCCESS for {key}")
 
         except Exception as e:
             logger.error(f"ERROR cleaning {key}: {e}")
             logger.error(traceback.format_exc())
 
     logger.info("=== ETL Pipeline Complete ===")
+
 
 if __name__ == "__main__":
     run_pipeline()

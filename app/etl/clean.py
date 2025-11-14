@@ -2,11 +2,10 @@ import pandas as pd
 import boto3
 from io import BytesIO
 
-from app.etl.validate import validate_dataframe
-from app.etl.summary import summarize_dataframe
-from app.vectors.embed_data import embed_parquet
-from app.log import logger  # if log is inside app/log.py
-
+from etl.validate import validate_dataframe
+from etl.summary import summarize_dataframe
+from vectors.embed_data import embed_parquet
+from log import logger
 
 RAW_BUCKET = "openai-data-hub-raw"
 CLEAN_BUCKET = "openai-data-hub-clean"
@@ -17,53 +16,44 @@ s3 = boto3.client("s3")
 
 def clean_file(key):
     """
-    Cleans a raw CSV file, validates it, converts to Parquet,
-    generates AI summary, and generates embeddings.
+    Cleans raw CSV → Parquet
+    Generates AI summary
+    Generates vector embeddings
     """
 
     logger.info(f"Starting cleaning for: {key}")
 
-    # ---------------------------------------------------------
-    # 1. LOAD RAW FILE FROM S3
-    # ---------------------------------------------------------
+    # Load raw CSV
     obj = s3.get_object(Bucket=RAW_BUCKET, Key=key)
     df = pd.read_csv(obj["Body"])
 
-    # ---------------------------------------------------------
-    # 2. VALIDATION
-    # ---------------------------------------------------------
+    # Validate
     df, issues = validate_dataframe(df)
-    logger.info(f"Validation issues for {key}: {issues}")
+    logger.info(f"Validation issues: {issues}")
 
     if df.empty:
-        logger.warning(f"{key}: File is empty. Skipping cleaning.")
+        logger.warning(f"{key}: Empty file. Skipping.")
         return False
 
-    # ---------------------------------------------------------
-    # 3. CLEANING
-    # ---------------------------------------------------------
-    df = df.dropna(how="all")    # drop fully empty rows
-    df = df.fillna("")           # fill remaining missing
-    df = df.drop_duplicates()    # remove duplicate rows
+    # Clean
+    df = df.dropna(how="all")
+    df = df.fillna("")
+    df = df.drop_duplicates()
 
-    # ---------------------------------------------------------
-    # 4. WRITE PARQUET (fastparquet)
-    # ---------------------------------------------------------
+    # Convert to Parquet
     out_buffer = BytesIO()
     parquet_key = key.replace(".csv", ".parquet")
-
     df.to_parquet(out_buffer, index=False, engine="fastparquet")
 
+    # Upload
     s3.put_object(
         Bucket=CLEAN_BUCKET,
         Key=parquet_key,
         Body=out_buffer.getvalue()
     )
-    logger.info(f"Clean parquet uploaded to: {parquet_key}")
+    logger.info(f"Uploaded parquet: {parquet_key}")
 
-    # ---------------------------------------------------------
-    # 5. AI SUMMARY
-    # ---------------------------------------------------------
+    # AI Summary
     try:
         summary_text = summarize_dataframe(df)
         summary_key = key.replace(".csv", ".txt")
@@ -73,22 +63,17 @@ def clean_file(key):
             Key=summary_key,
             Body=summary_text.encode("utf-8")
         )
-
-        logger.info(f"AI summary uploaded to: {summary_key}")
+        logger.info(f"Uploaded summary: {summary_key}")
 
     except Exception as e:
-        logger.error(f"Error generating AI summary for {key}: {e}")
+        logger.error(f"Summary error for {key}: {e}")
 
-    # ---------------------------------------------------------
-    # 6. GENERATE VECTOR EMBEDDINGS
-    # ---------------------------------------------------------
+    # Vector Embeddings
     try:
         embed_parquet(parquet_key)
-        logger.info(f"Embeddings generated for {parquet_key}")
-
+        logger.info(f"Embeddings OK for {parquet_key}")
     except Exception as e:
         logger.error(f"Embedding failed for {parquet_key}: {e}")
 
-    logger.info(f"Cleaning completed for: {key}")
-
+    logger.info(f"Finished cleaning for {key}")
     return True
