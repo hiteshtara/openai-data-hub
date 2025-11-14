@@ -10,13 +10,32 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 @router.get("/query")
 def rag_query(question: str = Query(...)):
     try:
+        # Embed the query
         emb = openai.Embedding.create(
             model="text-embedding-3-small",
             input=question
         )["data"][0]["embedding"]
 
-        results = query_vectors(np.array(emb, dtype="float32"))
+        emb = np.array(emb, dtype="float32")
 
+        # Query FAISS
+        results = query_vectors(emb, k=5)
+
+        # If no vectors exist, return direct GPT answer
+        if len(results) == 0:
+            answer = openai.ChatCompletion.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"No context available. Answer directly:\n\n{question}"
+                    }
+                ]
+            )["choices"][0]["message"]["content"]
+
+            return {"answer": answer, "context": []}
+
+        # If vectors exist, use them
         prompt = f"Context: {results}\n\nQuestion: {question}\nAnswer:"
         answer = openai.ChatCompletion.create(
             model="gpt-4o-mini",
