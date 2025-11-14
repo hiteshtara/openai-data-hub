@@ -11,7 +11,7 @@ from log import logger
 # Load API key from environment for sudo-safe ETL
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-s3 = boto3.client("s3")
+s3 = boto3.client("s3", region_name="us-east-1")
 CLEAN_BUCKET = "openai-data-hub-clean"
 
 
