@@ -4,7 +4,7 @@ import chardet
 from io import BytesIO
 import os
 from app.log import logger
-from etl.validate import validate_dataframe
+from app.etl.validate import validate_dataframe
 
 RAW_BUCKET = "openai-data-hub-raw"
 CLEAN_BUCKET = "openai-data-hub-clean"
