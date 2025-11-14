@@ -2,10 +2,11 @@ import pandas as pd
 import boto3
 from io import BytesIO
 
-from validate import validate_dataframe
-from summary import summarize_dataframe
-from log import logger
+from app.etl.validate import validate_dataframe
+from app.etl.summary import summarize_dataframe
 from app.vectors.embed_data import embed_parquet
+from app.log import logger  # if log is inside app/log.py
+
 
 RAW_BUCKET = "openai-data-hub-raw"
 CLEAN_BUCKET = "openai-data-hub-clean"
