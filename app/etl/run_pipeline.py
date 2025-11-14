@@ -1,5 +1,5 @@
 import boto3
-from log import logger
+from app.log import logger
 from app.etl.clean import clean_file
 from app.vectors.embed_data import embed_parquet
 
