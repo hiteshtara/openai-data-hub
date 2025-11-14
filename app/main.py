@@ -1,9 +1,10 @@
 from fastapi import FastAPI
-from api.routes_etl import router as etl_router
-from api.routes_summary import router as summary_router
-from api.routes_ai_rag import router as rag_router
+from app.api.routes_etl import router as etl_router
+from app.api.routes_ai_rag import router as rag_router
+from app.api.routes_totals import router as totals_router
 
-from api.routes_totals import router as totals_router
+from app.log import logger
+
 
 
 
