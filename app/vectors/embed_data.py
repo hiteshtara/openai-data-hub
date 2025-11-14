@@ -1,48 +1,48 @@
-import pandas as pd
-import openai
+import os
 import json
 import boto3
+import pandas as pd
 from io import BytesIO
+import openai
 
 from vectors.vector_store import get_collection
 from log import logger
 
-openai.api_key = None  # systemd provides OPENAI_API_KEY
+# Load API key inside script (sudo-safe)
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 s3 = boto3.client("s3")
-
 CLEAN_BUCKET = "openai-data-hub-clean"
 
 
-def embed_parquet(key):
+def embed_parquet(key: str):
     """
-    Generates vector embeddings for each row of the cleaned parquet file.
-    Stores them in persistent ChromaDB.
+    Generate embeddings for each row in the cleaned parquet file.
+    Uses OpenAI Embeddings (v0.28.0 API)
     """
+
+    if not openai.api_key:
+        logger.error("OpenAI key missing inside embed_data.py")
+        return False
 
     logger.info(f"Embedding data for: {key}")
 
     # ---------------------------------------------------------
-    # 1. Load parquet file SAFELY from S3 (fix for seek error)
+    # 1. Load Parquet safely from S3 (fix seek errors)
     # ---------------------------------------------------------
     try:
         obj = s3.get_object(Bucket=CLEAN_BUCKET, Key=key)
         raw_bytes = obj["Body"].read()
         df = pd.read_parquet(BytesIO(raw_bytes))
     except Exception as e:
-        logger.error(f"Failed to load parquet file {key}: {e}")
+        logger.error(f"Could not load parquet {key}: {e}")
         return False
 
-    # Convert each row into a document
     rows = df.to_dict(orient="records")
-
-    # ---------------------------------------------------------
-    # 2. Connect to Chroma vector store
-    # ---------------------------------------------------------
     collection = get_collection()
 
     # ---------------------------------------------------------
-    # 3. Embed each row using OpenAI Embeddings API (v0.28)
+    # 2. Embed each row
     # ---------------------------------------------------------
     for i, row in enumerate(rows):
         text = json.dumps(row)
@@ -63,5 +63,5 @@ def embed_parquet(key):
             logger.error(f"Embedding failed for row {i} in {key}: {e}")
             continue
 
-    logger.info(f"Embedding complete for {key}")
+    logger.info(f"Embedding complete for: {key}")
     return True

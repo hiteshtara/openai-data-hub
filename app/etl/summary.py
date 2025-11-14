@@ -1,54 +1,54 @@
 import pandas as pd
-import openai
 import json
+import os
+import openai
 from log import logger
 
-# Systemd injects OPENAI_API_KEY as environment variable
-openai.api_key = None
+# Load API key INSIDE the script (important for sudo)
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def summarize_dataframe(df: pd.DataFrame):
+
+def summarize_dataframe(df: pd.DataFrame) -> str:
     """
-    Generates an OpenAI summary of the cleaned dataset.
+    Generate an AI summary of the dataset.
+    Works with OpenAI v0.28.0
     """
 
-    # Basic metadata
+    # Failsafe: ensure key is available
+    if not openai.api_key:
+        logger.error("OpenAI key missing inside summary.py")
+        return "ERROR: Missing OPENAI_API_KEY"
+
     rows = len(df)
-    columns = list(df.columns)
-    col_count = len(columns)
-
-    numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-
+    cols = list(df.columns)
     sample = df.head(5).to_dict(orient="records")
 
     prompt = f"""
-    You are a data analyst. Summarize this dataset.
+    You are a data analyst.
 
-    Metadata:
-    - Rows: {rows}
-    - Columns: {col_count}
-    - Column names: {columns}
-    - Numeric columns: {numeric_cols}
+    The dataset has:
+    - {rows} rows
+    - {len(cols)} columns
+    Columns: {cols}
 
-    Sample:
+    Sample data:
     {json.dumps(sample)}
 
     Provide:
     1. High-level summary
-    2. Patterns and trends
-    3. Data quality notes
-    4. Any interesting insights
+    2. Patterns or trends
+    3. Possible data issues
+    4. Interesting observations
     """
 
-    logger.info("Requesting summary from OpenAI...")
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300
+        )
+        return response["choices"][0]["message"]["content"]
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=350
-    )
-
-    summary = response["choices"][0]["message"]["content"]
-
-    logger.info("Summary received.")
-
-    return summary
+    except Exception as e:
+        logger.error(f"OpenAI summary error: {e}")
+        return f"ERROR: {e}"
