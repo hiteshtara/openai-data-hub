@@ -1,0 +1,93 @@
+##############################
+# NODE / NEXT.JS (Dashboard)
+##############################
+
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# Next.js
+.next/
+out/
+.nextcache/
+
+# Tailwind
+*.css.map
+
+# Local env
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+
+##############################
+# PYTHON / FASTAPI BACKEND
+##############################
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+
+# Virtual environments
+venv/
+.env/
+.venv/
+
+# Build artifacts
+dist/
+build/
+
+# Logs
+*.log
+logs/
+*.sqlite3
+
+##############################
+# SENSITIVE FILES
+##############################
+
+# AWS Keys
+credentials
+*.pem
+*.key
+*.crt
+
+# EC2 Deployment secrets
+deploy_key
+*.pub
+id_rsa
+id_rsa.pub
+ssh_config
+
+##############################
+# OS / EDITOR FILES
+##############################
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# VS Code
+.vscode/
+.history/
+
+# JetBrains
+.idea/
+
+##############################
+# MISC
+##############################
+
+# Temporary files
+tmp/
+*.tmp
+*.swp
+*.swo
