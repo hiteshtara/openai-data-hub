@@ -5,7 +5,7 @@ from io import BytesIO
 from validate import validate_dataframe
 from summary import summarize_dataframe
 from log import logger
-from vectors.embed_data import embed_parquet
+from app.vectors.embed_data import embed_parquet
 
 RAW_BUCKET = "openai-data-hub-raw"
 CLEAN_BUCKET = "openai-data-hub-clean"
