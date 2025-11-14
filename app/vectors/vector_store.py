@@ -1,19 +1,28 @@
-import chromadb
-from chromadb.config import Settings
+import faiss
+import numpy as np
 import os
+import pickle
 
 VECTOR_DIR = "/opt/openai-data-hub/vectors"
 os.makedirs(VECTOR_DIR, exist_ok=True)
 
-def get_collection():
-    client = chromadb.Client(
-        Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=VECTOR_DIR,
-        )
-    )
+INDEX_FILE = f"{VECTOR_DIR}/faiss.index"
+META_FILE = f"{VECTOR_DIR}/metadata.pkl"
 
-    return client.get_or_create_collection(
-        name="etl_vectors",
-        metadata={"hnsw:space": "cosine"}  # legacy API requirement
-    )
+def load_index(d):
+    if os.path.exists(INDEX_FILE):
+        index = faiss.read_index(INDEX_FILE)
+    else:
+        index = faiss.IndexFlatL2(d)
+    return index
+
+def save_index(index):
+    faiss.write_index(index, INDEX_FILE)
+
+def load_metadata():
+    if os.path.exists(META_FILE):
+        return pickle.load(open(META_FILE, "rb"))
+    return []
+
+def save_metadata(meta):
+    pickle.dump(meta, open(META_FILE, "wb"))
