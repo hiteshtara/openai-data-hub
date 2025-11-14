@@ -47,9 +47,9 @@ app.include_router(analytics_router)
 #   DASHBOARD STATIC FILE MOUNT
 # ---------------------------------------------------------
 
-# Serve Next.js static build from /dashboard
+## Serve entire Next.js static export
 app.mount(
-    "/dashboard",
+    "/",
     StaticFiles(directory="/opt/openai-data-hub/dashboard/out", html=True),
-    name="dashboard",
+    name="nextjs"
 )
