@@ -2,6 +2,8 @@ import boto3
 from clean import clean_file
 
 RAW_BUCKET = "openai-data-hub-raw"
+CLEAN_BUCKET = "openai-data-hub-clean"
+
 
 s3 = boto3.client("s3")
 
