@@ -1,49 +1,42 @@
-import sys
-import os
-
-# Add /opt/openai-data-hub/app to Python path
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.append(APP_ROOT)
-
 import boto3
-import traceback
-from etl.clean import clean_file
 from log import logger
+from etl.clean import clean_file
+from vectors.embed_data import embed_parquet
 
 RAW_BUCKET = "openai-data-hub-raw"
 
 s3 = boto3.client("s3", region_name="us-east-1")
 
-
 def run_pipeline():
-    logger.info("=== Starting ETL Pipeline ===")
+    logger.info("=== ETL Pipeline Start ===")
 
-    try:
-        response = s3.list_objects_v2(Bucket=RAW_BUCKET)
-    except Exception as e:
-        logger.error(f"Failed listing bucket {RAW_BUCKET}: {e}")
-        return
-
+    # List raw files
+    response = s3.list_objects_v2(Bucket=RAW_BUCKET)
     if "Contents" not in response:
         logger.info("No raw files found.")
         return
 
     for obj in response["Contents"]:
         key = obj["Key"]
-
-        if not key.endswith(".csv"):
-            logger.info(f"Skipping non-CSV file: {key}")
+        if not (key.endswith(".csv") or key.endswith(".xlsx")):
+            logger.info(f"Skipping non-data file: {key}")
             continue
 
         logger.info(f"Processing: {key}")
 
-        try:
-            clean_file(key)
-            logger.info(f"SUCCESS for {key}")
+        # Step 1 — Clean file
+        clean_key = clean_file(key)
+        if not clean_key:
+            logger.error(f"Cleaning failed: {key}")
+            continue
 
-        except Exception as e:
-            logger.error(f"ERROR cleaning {key}: {e}")
-            logger.error(traceback.format_exc())
+        # Step 2 — Embed cleaned parquet using FAISS
+        success = embed_parquet(clean_key)
+        if not success:
+            logger.error(f"Embedding failed: {clean_key}")
+            continue
+
+        logger.info(f"SUCCESS for {key}")
 
     logger.info("=== ETL Pipeline Complete ===")
 
