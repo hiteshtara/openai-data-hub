@@ -20,29 +20,39 @@ def clean_file(key):
     Cleans raw CSV → Parquet
     Generates AI summary
     Generates vector embeddings
+    Handles ANY CSV: UTF-8, Windows-1252, ISO-8859-1
+    Skips malformed rows safely
     """
 
     logger.info(f"Starting cleaning for: {key}")
 
     # ---------------------------------------------------------
-    # 1. LOAD RAW FILE FROM S3 WITH AUTO-ENCODING DETECTION
+    # 1. LOAD RAW CSV WITH AUTO-ENCODING DETECTION
     # ---------------------------------------------------------
     obj = s3.get_object(Bucket=RAW_BUCKET, Key=key)
-
     raw_bytes = obj["Body"].read()
 
-    # Detect encoding (avoids UnicodeDecodeError)
+    # Detect encoding (fixes UnicodeDecodeError)
     detected = chardet.detect(raw_bytes)
     encoding = detected.get("encoding", "utf-8")
 
     logger.info(f"Detected encoding for {key}: {encoding}")
 
+    # Try loading with detected encoding
     try:
-        df = pd.read_csv(BytesIO(raw_bytes), encoding=encoding)
+        df = pd.read_csv(
+            BytesIO(raw_bytes),
+            encoding=encoding,
+            on_bad_lines="skip"      # skip malformed rows
+        )
     except Exception:
-        # Fallback for Windows/Excel CSV files
-        logger.warning(f"{key}: Falling back to ISO-8859-1 encoding.")
-        df = pd.read_csv(BytesIO(raw_bytes), encoding="ISO-8859-1", engine="python")
+        logger.warning(f"{key}: fallback ISO-8859-1 with bad line skipping.")
+        df = pd.read_csv(
+            BytesIO(raw_bytes),
+            encoding="ISO-8859-1",
+            engine="python",
+            on_bad_lines="skip"
+        )
 
     # ---------------------------------------------------------
     # 2. VALIDATION
@@ -51,23 +61,18 @@ def clean_file(key):
     logger.info(f"Validation issues: {issues}")
 
     if df.empty:
-        logger.warning(f"{key}: Empty file. Skipping.")
+        logger.warning(f"{key}: File is empty after parsing. Skipping.")
         return False
 
     # ---------------------------------------------------------
-    # 3. CLEANING
+    # 3. CLEANING PIPELINE
     # ---------------------------------------------------------
-    # Drop empty rows
-    df = df.dropna(how="all")
-
-    # Replace NaN with blank
-    df = df.fillna("")
-
-    # Remove duplicate rows
-    df = df.drop_duplicates()
+    df = df.dropna(how="all")  # drop fully empty rows
+    df = df.fillna("")         # fill missing values
+    df = df.drop_duplicates()  # remove duplicate rows
 
     # ---------------------------------------------------------
-    # 4. CONVERT TO PARQUET (fastparquet)
+    # 4. WRITE CLEAN PARQUET (fastparquet)
     # ---------------------------------------------------------
     out_buffer = BytesIO()
     parquet_key = key.replace(".csv", ".parquet")
@@ -79,10 +84,11 @@ def clean_file(key):
         Key=parquet_key,
         Body=out_buffer.getvalue()
     )
+
     logger.info(f"Uploaded cleaned parquet: {parquet_key}")
 
     # ---------------------------------------------------------
-    # 5. AI SUMMARY (OpenAI GPT)
+    # 5. AI SUMMARY
     # ---------------------------------------------------------
     try:
         summary_text = summarize_dataframe(df)
@@ -93,17 +99,19 @@ def clean_file(key):
             Key=summary_key,
             Body=summary_text.encode("utf-8")
         )
+
         logger.info(f"Uploaded AI summary: {summary_key}")
 
     except Exception as e:
-        logger.error(f"Summary error for {key}: {e}")
+        logger.error(f"AI summary failed for {key}: {e}")
 
     # ---------------------------------------------------------
     # 6. VECTOR EMBEDDINGS (RAG)
     # ---------------------------------------------------------
     try:
         embed_parquet(parquet_key)
-        logger.info(f"Embeddings generated for {parquet_key}")
+        logger.info(f"Embeddings generated for: {parquet_key}")
+
     except Exception as e:
         logger.error(f"Embedding failed for {parquet_key}: {e}")
 
