@@ -1,7 +1,7 @@
 import boto3
 from log import logger
-from etl.clean import clean_file
-from vectors.embed_data import embed_parquet
+from app.etl.clean import clean_file
+from app.vectors.embed_data import embed_parquet
 
 RAW_BUCKET = "openai-data-hub-raw"
 
