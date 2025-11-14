@@ -3,7 +3,7 @@ import boto3
 import chardet
 from io import BytesIO
 import os
-from log import logger
+from app.log import logger
 from etl.validate import validate_dataframe
 
 RAW_BUCKET = "openai-data-hub-raw"

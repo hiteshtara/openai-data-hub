@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query
 import boto3
 from etl.totals import compute_totals
-from log import logger
+from app.log import logger
 
 router = APIRouter()
 

@@ -2,6 +2,7 @@ import boto3
 import pandas as pd
 from io import BytesIO
 import json
+from app.log import logger
 
 CLEAN_BUCKET = "openai-data-hub-clean"
 TOTALS_KEY = "totals.json"
