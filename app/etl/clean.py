@@ -17,6 +17,26 @@ def is_printable(text):
         return False
     return all(32 <= ord(c) <= 126 or c in "\n\r\t" for c in text)
 
+def load_xlsx(raw_bytes):
+    """Load XLSX into a clean DataFrame (all sheets combined)."""
+    try:
+        excel = pd.ExcelFile(BytesIO(raw_bytes))
+        frames = [excel.parse(sheet_name=sheet) for sheet in excel.sheet_names]
+        df = pd.concat(frames, ignore_index=True)
+        return df
+    except Exception as e:
+        logger.error(f"Failed to parse XLSX: {e}")
+        return None
+
+def load_csv(raw_bytes):
+    """Load CSV with encoding detection."""
+    try:
+        enc = chardet.detect(raw_bytes)["encoding"] or "utf-8"
+        return pd.read_csv(BytesIO(raw_bytes), encoding=enc, on_bad_lines="skip", engine="python")
+    except Exception as e:
+        logger.error(f"Failed to parse CSV: {e}")
+        return None
+
 def clean_file(key: str):
     logger.info(f"Starting cleaning for: {key}")
 
@@ -27,24 +47,20 @@ def clean_file(key: str):
         logger.error(f"Failed to load {key}: {e}")
         return None
 
-    # Detect encoding
-    try:
-        enc = chardet.detect(raw_bytes)["encoding"] or "utf-8"
-        logger.info(f"Detected encoding for {key}: {enc}")
-    except:
-        enc = "utf-8"
-
-    # Load CSV
-    try:
-        df = pd.read_csv(BytesIO(raw_bytes), encoding=enc, on_bad_lines="skip", engine="python")
-    except Exception as e:
-        logger.error(f"CSV parse failed for {key}: {e}")
+    # Load based on extension
+    if key.lower().endswith(".xlsx"):
+        df = load_xlsx(raw_bytes)
+    elif key.lower().endswith(".csv"):
+        df = load_csv(raw_bytes)
+    else:
+        logger.error(f"Unsupported file type for {key}")
         return None
 
-    # Remove completely empty rows
-    df.dropna(how="all", inplace=True)
+    if df is None or df.empty:
+        logger.warning(f"{key} produced no dataframe")
+        return None
 
-    # Convert everything to strings
+    df.dropna(how="all", inplace=True)
     df = df.astype(str)
 
     # Filter printable rows
@@ -55,22 +71,20 @@ def clean_file(key: str):
             cleaned_rows.append(row.to_dict())
 
     if len(cleaned_rows) == 0:
-        logger.warning(f"No printable rows found in {key}")
+        logger.warning(f"All rows removed due to binary content in {key}")
         return None
 
     clean_df = pd.DataFrame(cleaned_rows)
 
-    # Validate
     issues = validate_dataframe(clean_df)
     logger.info(f"Validation issues: {issues}")
 
-    # Save cleaned parquet
     try:
         buffer = BytesIO()
         clean_df.to_parquet(buffer, index=False)
         buffer.seek(0)
 
-        out_key = key.replace(".csv", ".parquet")
+        out_key = key.replace(".xlsx", ".parquet").replace(".csv", ".parquet")
 
         s3.put_object(
             Bucket=CLEAN_BUCKET,
@@ -78,9 +92,8 @@ def clean_file(key: str):
             Body=buffer.getvalue()
         )
 
-        logger.info(f"Uploaded cleaned file: {out_key}")
+        logger.info(f"Uploaded cleaned parquet: {out_key}")
         return out_key
-
     except Exception as e:
-        logger.error(f"Failed to upload cleaned {key}: {e}")
+        logger.error(f"Failed to upload cleaned file {key}: {e}")
         return None
