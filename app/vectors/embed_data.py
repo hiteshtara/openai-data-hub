@@ -2,45 +2,66 @@ import pandas as pd
 import openai
 import json
 import boto3
+from io import BytesIO
+
 from vectors.vector_store import get_collection
 from log import logger
 
-openai.api_key = None  # systemd injects API key
+openai.api_key = None  # systemd provides OPENAI_API_KEY
 
 s3 = boto3.client("s3")
+
 CLEAN_BUCKET = "openai-data-hub-clean"
 
 
 def embed_parquet(key):
     """
-    Create embeddings for each row of a cleaned parquet dataset.
-    Stores them in ChromaDB.
+    Generates vector embeddings for each row of the cleaned parquet file.
+    Stores them in persistent ChromaDB.
     """
 
     logger.info(f"Embedding data for: {key}")
 
-    # Load parquet from S3
-    obj = s3.get_object(Bucket=CLEAN_BUCKET, Key=key)
-    df = pd.read_parquet(obj["Body"])
+    # ---------------------------------------------------------
+    # 1. Load parquet file SAFELY from S3 (fix for seek error)
+    # ---------------------------------------------------------
+    try:
+        obj = s3.get_object(Bucket=CLEAN_BUCKET, Key=key)
+        raw_bytes = obj["Body"].read()
+        df = pd.read_parquet(BytesIO(raw_bytes))
+    except Exception as e:
+        logger.error(f"Failed to load parquet file {key}: {e}")
+        return False
 
+    # Convert each row into a document
     rows = df.to_dict(orient="records")
 
+    # ---------------------------------------------------------
+    # 2. Connect to Chroma vector store
+    # ---------------------------------------------------------
     collection = get_collection()
 
+    # ---------------------------------------------------------
+    # 3. Embed each row using OpenAI Embeddings API (v0.28)
+    # ---------------------------------------------------------
     for i, row in enumerate(rows):
         text = json.dumps(row)
 
-        # Generate embedding using OpenAI
-        emb = openai.Embedding.create(
-            model="text-embedding-3-small",
-            input=text
-        )["data"][0]["embedding"]
+        try:
+            emb = openai.Embedding.create(
+                model="text-embedding-3-small",
+                input=text
+            )["data"][0]["embedding"]
 
-        # Store in vector DB
-        collection.add(
-            ids=[f"{key}_{i}"],
-            embeddings=[emb],
-            documents=[text]
-        )
+            collection.add(
+                ids=[f"{key}_{i}"],
+                embeddings=[emb],
+                documents=[text]
+            )
+
+        except Exception as e:
+            logger.error(f"Embedding failed for row {i} in {key}: {e}")
+            continue
 
     logger.info(f"Embedding complete for {key}")
+    return True
