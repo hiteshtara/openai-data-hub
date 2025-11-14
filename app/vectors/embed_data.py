@@ -2,7 +2,7 @@ import pandas as pd
 import openai
 import json
 import boto3
-from vector_store import get_collection
+from vectors.vector_store import get_collection
 from log import logger
 
 openai.api_key = None  # systemd injects API key
