@@ -1,119 +1,86 @@
 import pandas as pd
 import boto3
+import chardet
 from io import BytesIO
-import chardet  # encoding detection
-
-from etl.validate import validate_dataframe
-from etl.summary import summarize_dataframe
-from vectors.embed_data import embed_parquet
+import os
 from log import logger
+from etl.validate import validate_dataframe
 
 RAW_BUCKET = "openai-data-hub-raw"
 CLEAN_BUCKET = "openai-data-hub-clean"
-SUMMARY_BUCKET = "openai-data-hub-ai"
 
-s3 = boto3.client("s3")
+s3 = boto3.client("s3", region_name="us-east-1")
 
+def is_printable(text):
+    """Return True if a string contains readable characters."""
+    if not isinstance(text, str):
+        return False
+    return all(32 <= ord(c) <= 126 or c in "\n\r\t" for c in text)
 
-def clean_file(key):
-    """
-    Cleans raw CSV → Parquet
-    Generates AI summary
-    Generates vector embeddings
-    Handles ANY CSV: UTF-8, Windows-1252, ISO-8859-1
-    Skips malformed rows safely
-    """
-
+def clean_file(key: str):
     logger.info(f"Starting cleaning for: {key}")
 
-    # ---------------------------------------------------------
-    # 1. LOAD RAW CSV WITH AUTO-ENCODING DETECTION
-    # ---------------------------------------------------------
-    obj = s3.get_object(Bucket=RAW_BUCKET, Key=key)
-    raw_bytes = obj["Body"].read()
-
-    # Detect encoding (fixes UnicodeDecodeError)
-    detected = chardet.detect(raw_bytes)
-    encoding = detected.get("encoding", "utf-8")
-
-    logger.info(f"Detected encoding for {key}: {encoding}")
-
-    # Try loading with detected encoding
     try:
-        df = pd.read_csv(
-            BytesIO(raw_bytes),
-            encoding=encoding,
-            on_bad_lines="skip"      # skip malformed rows
-        )
-    except Exception:
-        logger.warning(f"{key}: fallback ISO-8859-1 with bad line skipping.")
-        df = pd.read_csv(
-            BytesIO(raw_bytes),
-            encoding="ISO-8859-1",
-            engine="python",
-            on_bad_lines="skip"
-        )
+        obj = s3.get_object(Bucket=RAW_BUCKET, Key=key)
+        raw_bytes = obj["Body"].read()
+    except Exception as e:
+        logger.error(f"Failed to load {key}: {e}")
+        return None
 
-    # ---------------------------------------------------------
-    # 2. VALIDATION
-    # ---------------------------------------------------------
-    df, issues = validate_dataframe(df)
+    # Detect encoding
+    try:
+        enc = chardet.detect(raw_bytes)["encoding"] or "utf-8"
+        logger.info(f"Detected encoding for {key}: {enc}")
+    except:
+        enc = "utf-8"
+
+    # Load CSV
+    try:
+        df = pd.read_csv(BytesIO(raw_bytes), encoding=enc, on_bad_lines="skip", engine="python")
+    except Exception as e:
+        logger.error(f"CSV parse failed for {key}: {e}")
+        return None
+
+    # Remove completely empty rows
+    df.dropna(how="all", inplace=True)
+
+    # Convert everything to strings
+    df = df.astype(str)
+
+    # Filter printable rows
+    cleaned_rows = []
+    for _, row in df.iterrows():
+        row_str = " ".join(row.values)
+        if is_printable(row_str):
+            cleaned_rows.append(row.to_dict())
+
+    if len(cleaned_rows) == 0:
+        logger.warning(f"No printable rows found in {key}")
+        return None
+
+    clean_df = pd.DataFrame(cleaned_rows)
+
+    # Validate
+    issues = validate_dataframe(clean_df)
     logger.info(f"Validation issues: {issues}")
 
-    if df.empty:
-        logger.warning(f"{key}: File is empty after parsing. Skipping.")
-        return False
-
-    # ---------------------------------------------------------
-    # 3. CLEANING PIPELINE
-    # ---------------------------------------------------------
-    df = df.dropna(how="all")  # drop fully empty rows
-    df = df.fillna("")         # fill missing values
-    df = df.drop_duplicates()  # remove duplicate rows
-
-    # ---------------------------------------------------------
-    # 4. WRITE CLEAN PARQUET (fastparquet)
-    # ---------------------------------------------------------
-    out_buffer = BytesIO()
-    parquet_key = key.replace(".csv", ".parquet")
-
-    df.to_parquet(out_buffer, index=False, engine="fastparquet")
-
-    s3.put_object(
-        Bucket=CLEAN_BUCKET,
-        Key=parquet_key,
-        Body=out_buffer.getvalue()
-    )
-
-    logger.info(f"Uploaded cleaned parquet: {parquet_key}")
-
-    # ---------------------------------------------------------
-    # 5. AI SUMMARY
-    # ---------------------------------------------------------
+    # Save cleaned parquet
     try:
-        summary_text = summarize_dataframe(df)
-        summary_key = key.replace(".csv", ".txt")
+        buffer = BytesIO()
+        clean_df.to_parquet(buffer, index=False)
+        buffer.seek(0)
+
+        out_key = key.replace(".csv", ".parquet")
 
         s3.put_object(
-            Bucket=SUMMARY_BUCKET,
-            Key=summary_key,
-            Body=summary_text.encode("utf-8")
+            Bucket=CLEAN_BUCKET,
+            Key=out_key,
+            Body=buffer.getvalue()
         )
 
-        logger.info(f"Uploaded AI summary: {summary_key}")
+        logger.info(f"Uploaded cleaned file: {out_key}")
+        return out_key
 
     except Exception as e:
-        logger.error(f"AI summary failed for {key}: {e}")
-
-    # ---------------------------------------------------------
-    # 6. VECTOR EMBEDDINGS (RAG)
-    # ---------------------------------------------------------
-    try:
-        embed_parquet(parquet_key)
-        logger.info(f"Embeddings generated for: {parquet_key}")
-
-    except Exception as e:
-        logger.error(f"Embedding failed for {parquet_key}: {e}")
-
-    logger.info(f"Finished cleaning for: {key}")
-    return True
+        logger.error(f"Failed to upload cleaned {key}: {e}")
+        return None
