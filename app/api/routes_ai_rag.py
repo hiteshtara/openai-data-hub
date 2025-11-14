@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Query
 import openai, os
 import numpy as np
+from app.log import logger
 
-from vectors.vector_store import query_vectors, load_index, load_metadata
+from app.vectors.vector_store import query_vectors, load_index, load_metadata
 
 router = APIRouter()
 openai.api_key = os.getenv("OPENAI_API_KEY")
