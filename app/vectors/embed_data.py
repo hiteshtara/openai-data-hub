@@ -6,7 +6,7 @@ from io import BytesIO
 import openai
 import numpy as np
 
-from vectors.vector_store import add_vectors
+from app.vectors.vector_store import add_vectors
 from app.log import logger
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
